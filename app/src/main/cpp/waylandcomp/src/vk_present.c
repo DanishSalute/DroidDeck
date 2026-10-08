@@ -379,15 +379,9 @@ static int has_ext(VkExtensionProperties *e, uint32_t n, const char *name) {
     return 0;
 }
 
-/* Instance + device + command objects. Doesn't need the window. */
-static int dev_init(void) {
-    if (g_dev_state != 0) return g_dev_state == 1 ? 0 : -1;
-
-    /* Load Turnip (adrenotools) and its entry points - NOT the system driver. */
-    if (vk_loader_open(g_driver_path, g_library_name, g_native_lib_dir) != 0) {
-        LOGE("present: vk_loader_open failed"); g_dev_state = -1; return -1;
-    }
-
+/* The instance on whichever driver vk_loader has open. */
+static int create_instance(void) {
+    g_colorspace_ext = 0;
     const char *inst_exts[3] = {VK_KHR_SURFACE_EXTENSION_NAME,
                                 VK_KHR_ANDROID_SURFACE_EXTENSION_NAME, NULL};
     uint32_t n_inst_exts = 2;
@@ -421,12 +415,37 @@ static int dev_init(void) {
                                 .enabledExtensionCount = n_inst_exts,
                                 .ppEnabledExtensionNames = inst_exts};
     if (g_vk.CreateInstance(&ici, NULL, &g_inst) != VK_SUCCESS) {
-        LOGE("present: vkCreateInstance failed"); g_dev_state = -1; return -1;
+        LOGE("present: vkCreateInstance failed"); return -1;
     }
     vk_loader_load_instance(g_inst);
+    return 0;
+}
+
+/* Instance + device + command objects. Doesn't need the window. */
+static int dev_init(void) {
+    if (g_dev_state != 0) return g_dev_state == 1 ? 0 : -1;
+
+    /* Load Turnip (adrenotools) and its entry points - NOT the system driver. */
+    if (vk_loader_open(g_driver_path, g_library_name, g_native_lib_dir) != 0) {
+        LOGE("present: vk_loader_open failed"); g_dev_state = -1; return -1;
+    }
+    if (create_instance() != 0) { g_dev_state = -1; return -1; }
 
     uint32_t npd = 0;
     g_vk.EnumeratePhysicalDevices(g_inst, &npd, NULL);
+    /* Turnip loads on any GPU but only finds Adreno (KGSL); on Mali and other GPUs it reports
+     * none. Retry once on the device's own driver through the system loader. */
+    if (!npd && vk_loader_is_custom()) {
+        droiddeck_log("gpu", "%s found no GPU: retrying with the system Vulkan driver",
+                   g_library_name ? g_library_name : "the custom driver");
+        g_vk.DestroyInstance(g_inst, NULL);
+        g_inst = VK_NULL_HANDLE;
+        if (vk_loader_open_system() != 0) {
+            LOGE("present: system Vulkan driver unavailable"); g_dev_state = -1; return -1;
+        }
+        if (create_instance() != 0) { g_dev_state = -1; return -1; }
+        g_vk.EnumeratePhysicalDevices(g_inst, &npd, NULL);
+    }
     if (!npd) { LOGE("present: no physical devices"); g_dev_state = -1; return -1; }
     VkPhysicalDevice pds[8]; if (npd > 8) npd = 8;
     g_vk.EnumeratePhysicalDevices(g_inst, &npd, pds);
@@ -445,8 +464,8 @@ static int dev_init(void) {
         g_vk.GetPhysicalDeviceProperties(g_pd, &props);
         snprintf(g_gpu_name, sizeof(g_gpu_name), "%s", props.deviceName);
         droiddeck_log("gpu", "compositor renders on %s with %s", props.deviceName,
-                   g_library_name ? g_library_name : "the system Vulkan driver");
-        if (g_driver_path) droiddeck_log("gpu", "driver folder %s", g_driver_path);
+                   vk_loader_is_custom() && g_library_name ? g_library_name : "the system Vulkan driver");
+        if (vk_loader_is_custom() && g_driver_path) droiddeck_log("gpu", "driver folder %s", g_driver_path);
     }
     g_vk.GetPhysicalDeviceMemoryProperties(g_pd, &g_memprops);
 

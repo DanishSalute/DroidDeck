@@ -18,7 +18,7 @@
     X(CreateAndroidSurfaceKHR) X(DestroySurfaceKHR) X(CreateDevice) \
     X(GetDeviceProcAddr) X(EnumerateDeviceExtensionProperties) \
     X(GetPhysicalDeviceMemoryProperties) X(GetPhysicalDeviceFormatProperties2) \
-    X(GetPhysicalDeviceImageFormatProperties2)
+    X(GetPhysicalDeviceImageFormatProperties2) X(DestroyInstance)
 
 #define VK_DEVICE_FUNCS(X) \
     X(GetDeviceQueue) X(CreateSwapchainKHR) X(DestroySwapchainKHR) X(GetSwapchainImagesKHR) \
@@ -51,6 +51,11 @@ extern struct vk_api g_vk;
  * and load global entry points. Returns 0 on success. */
 int vk_loader_open(const char *driver_path, const char *library_name,
                    const char *native_lib_dir);
+/* 1 when vk_loader_open loaded the custom driver through adrenotools, 0 for the system driver. */
+int vk_loader_is_custom(void);
+/* Switch to the system libvulkan (the device's own driver) after the custom driver found no GPU,
+ * and reload global entry points. Returns 0 on success. */
+int vk_loader_open_system(void);
 void vk_loader_load_instance(VkInstance instance);
 void vk_loader_load_device(VkDevice device);
 /* The driver's vkGetInstanceProcAddr (NULL before vk_loader_open): for modules that resolve their

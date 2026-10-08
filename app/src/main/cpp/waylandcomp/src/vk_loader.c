@@ -12,6 +12,7 @@
 
 struct vk_api g_vk;
 static void *g_handle;
+static int g_custom;  /* g_handle is the adrenotools driver, not the system libvulkan */
 static PFN_vkGetInstanceProcAddr g_gip;
 
 int vk_loader_open(const char *driver_path, const char *library_name,
@@ -24,6 +25,7 @@ int vk_loader_open(const char *driver_path, const char *library_name,
             RTLD_LOCAL | RTLD_NOW, ADRENOTOOLS_DRIVER_CUSTOM, tmpdir,
             native_lib_dir, driver_path, library_name, NULL, NULL);
         free(tmpdir);
+        g_custom = g_handle != NULL;
         __android_log_print(g_handle ? ANDROID_LOG_INFO : ANDROID_LOG_ERROR, TAG,
                             "adrenotools Turnip handle=%p (%s / %s)", g_handle,
                             driver_path, library_name);
@@ -44,6 +46,16 @@ int vk_loader_open(const char *driver_path, const char *library_name,
     VK_GLOBAL_FUNCS(X)
 #undef X
     return g_vk.CreateInstance ? 0 : -1;
+}
+
+int vk_loader_is_custom(void) { return g_custom; }
+
+int vk_loader_open_system(void) {
+    /* The custom driver's handle stays loaded: adrenotools offers no safe way to unload it. */
+    g_handle = NULL;
+    g_gip = NULL;
+    g_custom = 0;
+    return vk_loader_open(NULL, NULL, NULL);
 }
 
 PFN_vkGetInstanceProcAddr vk_loader_gipa(void) { return g_gip; }
