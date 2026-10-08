@@ -228,7 +228,7 @@ fi
 if [[ -f "${repo_root}/tools/wlroots/release.env" ]]; then
     . "${repo_root}/tools/wlroots/release.env"
     wlroots_archive=$(cached "${WLROOTS_SHA256}" wlroots.tzst \
-        bash -c 'gh release download "$0" -R "$1" -p wlroots.tzst -O "$out"' "${WLROOTS_TAG}" "${github_repo}")
+        bash -c 'gh release download "$0" -R "$1" -p wlroots.tzst -O "$out"' "${WLROOTS_TAG}" "${WLROOTS_REPO:-${github_repo}}")
     zstd -dc "${wlroots_archive}" | tar -xf - -C "${linuxfs_dir}"
     test -f "${linuxfs_dir}/usr/local/lib/droiddeck-wlroots/libwlroots-0.20.so"
 fi
